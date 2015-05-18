@@ -88,4 +88,9 @@ public interface IEngineConfig {
      */
     public Map<String, String> getMetricsConfig();
 
+    /**
+     * @return all properties to be passed to the factory
+     */
+    public Map<String, String> getTransportSecurityConfig();
+
 }

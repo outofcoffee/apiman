@@ -30,7 +30,7 @@ import io.apiman.gateway.engine.beans.exceptions.ConnectorException;
  * @author eric.wittmann@redhat.com
  */
 public class HttpConnectorFactory implements IConnectorFactory {
-    
+
     /**
      * Constructor.
      */
