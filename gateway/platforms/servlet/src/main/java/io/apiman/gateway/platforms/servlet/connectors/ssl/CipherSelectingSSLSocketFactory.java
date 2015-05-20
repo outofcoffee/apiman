@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.apiman.gateway.platforms.servlet.connectors;
+package io.apiman.gateway.platforms.servlet.connectors.ssl;
 
 import java.io.IOException;
 import java.net.InetAddress;
@@ -24,6 +24,9 @@ import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 
 /**
+ * Wraps an {@link SSLSocketFactory} allowing specification of ciphers and protocols via an
+ * {@link SSLSessionStrategy}, normally it's a per-JVM global setting.
+ *
  * @author Marc Savy <msavy@redhat.com>
  */
 public class CipherSelectingSSLSocketFactory extends SSLSocketFactory {

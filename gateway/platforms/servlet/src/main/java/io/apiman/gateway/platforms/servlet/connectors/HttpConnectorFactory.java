@@ -20,9 +20,14 @@ import io.apiman.gateway.engine.IServiceConnection;
 import io.apiman.gateway.engine.IServiceConnectionResponse;
 import io.apiman.gateway.engine.IServiceConnector;
 import io.apiman.gateway.engine.async.IAsyncResultHandler;
+import io.apiman.gateway.engine.auth.RequiredAuthType;
 import io.apiman.gateway.engine.beans.Service;
 import io.apiman.gateway.engine.beans.ServiceRequest;
 import io.apiman.gateway.engine.beans.exceptions.ConnectorException;
+import io.apiman.gateway.platforms.servlet.connectors.ssl.SSLSessionStrategy;
+import io.apiman.gateway.platforms.servlet.connectors.ssl.SSLSessionStrategyFactory;
+
+import java.util.Map;
 
 /**
  * Connector factory that uses HTTP to invoke back end systems.
@@ -31,10 +36,22 @@ import io.apiman.gateway.engine.beans.exceptions.ConnectorException;
  */
 public class HttpConnectorFactory implements IConnectorFactory {
 
+    // Standard auth
+    private final SSLSessionStrategy standardSslStrategy;
+    // 2WAY auth (i.e. mutual auth)
+    private final SSLSessionStrategy mutualAuthSslStrategy;
+
     /**
      * Constructor.
+     * @param config map of configuration options
      */
-    public HttpConnectorFactory() {
+    public HttpConnectorFactory(Map<String, String> config) {
+        try {
+            standardSslStrategy = SSLSessionStrategyFactory.buildMutual(config);
+            mutualAuthSslStrategy = SSLSessionStrategyFactory.buildStandard(config);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     /**
@@ -49,10 +66,28 @@ public class HttpConnectorFactory implements IConnectorFactory {
             @Override
             public IServiceConnection connect(ServiceRequest request,
                     IAsyncResultHandler<IServiceConnectionResponse> handler) throws ConnectorException {
-                HttpServiceConnection connection = new HttpServiceConnection(request, service, handler);
+
+                RequiredAuthType requiredAuthType = parseAuthType(service);
+                HttpServiceConnection connection = new HttpServiceConnection(request,
+                        service,
+                        requiredAuthType,
+                        getSslStrategy(requiredAuthType),
+                        handler);
                 return connection;
             }
         };
     }
 
+    protected RequiredAuthType parseAuthType(Service service) {
+        return RequiredAuthType.fromValue(service.getEndpointProperties().get(
+                RequiredAuthType.ENDPOINT_PROPERTIES_KEY));
+    }
+
+    protected SSLSessionStrategy getSslStrategy(RequiredAuthType authType) {
+        if (authType == RequiredAuthType.MTLS) {
+            return mutualAuthSslStrategy;
+        } else {
+            return standardSslStrategy;
+        }
+    }
 }

@@ -20,12 +20,15 @@ import io.apiman.gateway.engine.IServiceConnectionResponse;
 import io.apiman.gateway.engine.async.AsyncResultImpl;
 import io.apiman.gateway.engine.async.IAsyncHandler;
 import io.apiman.gateway.engine.async.IAsyncResultHandler;
+import io.apiman.gateway.engine.auth.RequiredAuthType;
 import io.apiman.gateway.engine.beans.Service;
 import io.apiman.gateway.engine.beans.ServiceRequest;
 import io.apiman.gateway.engine.beans.ServiceResponse;
 import io.apiman.gateway.engine.beans.exceptions.ConnectorException;
 import io.apiman.gateway.engine.io.IApimanBuffer;
 import io.apiman.gateway.platforms.servlet.GatewayThreadContext;
+import io.apiman.gateway.platforms.servlet.connectors.ssl.CipherSelectingSSLSocketFactory;
+import io.apiman.gateway.platforms.servlet.connectors.ssl.SSLSessionStrategy;
 import io.apiman.gateway.platforms.servlet.io.ByteBuffer;
 
 import java.io.IOException;
@@ -34,10 +37,6 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
-import java.security.KeyManagementException;
-import java.security.KeyStoreException;
-import java.security.NoSuchAlgorithmException;
-import java.security.cert.CertificateException;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -64,13 +63,13 @@ public class HttpServiceConnection implements IServiceConnection, IServiceConnec
         SUPPRESSED_HEADERS.add("X-API-Key"); //$NON-NLS-1$
     }
 
-    private Map<String, String> config;
-
     private ServiceRequest request;
     private Service service;
+    private RequiredAuthType authType;
+    private SSLSessionStrategy sslStrategy;
     private IAsyncResultHandler<IServiceConnectionResponse> responseHandler;
-    private boolean connected;
 
+    private boolean connected;
     private HttpURLConnection connection;
     private OutputStream outputStream;
 
@@ -78,36 +77,32 @@ public class HttpServiceConnection implements IServiceConnection, IServiceConnec
     private IAsyncHandler<Void> endHandler;
 
     private ServiceResponse response;
-    private SSLSessionStrategy sslSessionStrategy;
 
     /**
      * Constructor.
+     *
+     * @param sslStrategy the SSL strategy
      * @param request the request
      * @param service the service
+     * @param authType the authorization type
      * @param handler the result handler
      * @throws ConnectorException when unable to connect
      */
     public HttpServiceConnection(ServiceRequest request, Service service,
+            RequiredAuthType authType, SSLSessionStrategy sslStrategy,
             IAsyncResultHandler<IServiceConnectionResponse> handler) throws ConnectorException {
         this.request = request;
         this.service = service;
+        this.authType = authType;
+        this.sslStrategy = sslStrategy;
         this.responseHandler = handler;
 
         try {
-            this.sslSessionStrategy = SSLSessionStrategyFactory.build(config.get("clientKeystore"),
-                    config.get("keystorePassword"),
-                    config.get("allowedProtocols"),
-                    config.get("allowedCiphers"),
-                    config.get("trustSelf"),
-                    true,
-                    true);
             connect();
-        } catch (KeyManagementException | NoSuchAlgorithmException | KeyStoreException | CertificateException
-                | IOException e) {
-            handler.handle(AsyncResultImpl.<IServiceConnectionResponse>create(e));
+        } catch (Exception e) {
+            handler.handle(AsyncResultImpl.<IServiceConnectionResponse> create(e));
         }
     }
-
     /**
      * Connects to the back end system.
      */
@@ -134,12 +129,12 @@ public class HttpServiceConnection implements IServiceConnection, IServiceConnec
             connection = (HttpURLConnection) url.openConnection();
 
             if (connection instanceof HttpsURLConnection) {
-                SSLContext sslContext = sslSessionStrategy.getSslContext();
+                SSLContext sslContext = sslStrategy.getSslContext();
                 HttpsURLConnection https = (HttpsURLConnection) connection;
                 SSLSocketFactory socketFactory = new CipherSelectingSSLSocketFactory(
-                        sslContext.getSocketFactory(), sslSessionStrategy);
+                        sslContext.getSocketFactory(), sslStrategy);
                 https.setSSLSocketFactory(socketFactory);
-                https.setHostnameVerifier(sslSessionStrategy.getHostnameVerifier());
+                https.setHostnameVerifier(sslStrategy.getHostnameVerifier());
             }
 
             connection.setReadTimeout(15000);
@@ -228,7 +223,7 @@ public class HttpServiceConnection implements IServiceConnection, IServiceConnec
                 outputStream = connection.getOutputStream();
             }
             if (chunk instanceof ByteBuffer) {
-                byte [] buffer = (byte []) chunk.getNativeBuffer();
+                byte[] buffer = (byte[]) chunk.getNativeBuffer();
                 outputStream.write(buffer, 0, chunk.length());
             } else {
                 outputStream.write(chunk.getBytes());
@@ -257,7 +252,7 @@ public class HttpServiceConnection implements IServiceConnection, IServiceConnec
             }
             response.setCode(connection.getResponseCode());
             response.setMessage(connection.getResponseMessage());
-            responseHandler.handle(AsyncResultImpl.<IServiceConnectionResponse>create(this));
+            responseHandler.handle(AsyncResultImpl.<IServiceConnectionResponse> create(this));
         } catch (Exception e) {
             // TODO log this error
             throw new ConnectorException(e);
@@ -283,7 +278,7 @@ public class HttpServiceConnection implements IServiceConnection, IServiceConnec
             endHandler.handle(null);
         } catch (Throwable e) {
             // At this point we're sort of screwed, because we've already sent the response to
-            // the originating client - and we're in the process of sending the body data.  So
+            // the originating client - and we're in the process of sending the body data. So
             // I guess the only thing to do is abort() the connection and cross our fingers.
             if (connected) {
                 abort();
