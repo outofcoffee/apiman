@@ -15,11 +15,13 @@
  */
 package io.apiman.gateway.engine.auth;
 
+import io.apiman.gateway.engine.beans.Service;
+
 import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Enum representing Authorization types
+ * Enum representing Authorization types, with aliases.
  *
  * @author Marc Savy <msavy@redhat.com>
  */
@@ -72,5 +74,16 @@ public enum RequiredAuthType {
         } else {
             return constant;
         }
+    }
+
+    /**
+     * Parse service endpoint properties to retrieve enum value (if any)
+     *
+     * @param service the service
+     * @return the required auth type
+     */
+    public static RequiredAuthType parseType(Service service) {
+        return RequiredAuthType.fromValue(service.getEndpointProperties().get(
+                RequiredAuthType.ENDPOINT_PROPERTIES_KEY));
     }
 }

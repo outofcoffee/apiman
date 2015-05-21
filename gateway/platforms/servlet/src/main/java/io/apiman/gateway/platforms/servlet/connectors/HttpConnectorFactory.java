@@ -37,21 +37,17 @@ import java.util.Map;
 public class HttpConnectorFactory implements IConnectorFactory {
 
     // Standard auth
-    private final SSLSessionStrategy standardSslStrategy;
+    private SSLSessionStrategy standardSslStrategy;
     // 2WAY auth (i.e. mutual auth)
-    private final SSLSessionStrategy mutualAuthSslStrategy;
+    private SSLSessionStrategy mutualAuthSslStrategy;
+    private Map<String, String> config;
 
     /**
      * Constructor.
      * @param config map of configuration options
      */
     public HttpConnectorFactory(Map<String, String> config) {
-        try {
-            standardSslStrategy = SSLSessionStrategyFactory.buildMutual(config);
-            mutualAuthSslStrategy = SSLSessionStrategyFactory.buildStandard(config);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+        this.config = config;
     }
 
     /**
@@ -67,7 +63,7 @@ public class HttpConnectorFactory implements IConnectorFactory {
             public IServiceConnection connect(ServiceRequest request,
                     IAsyncResultHandler<IServiceConnectionResponse> handler) throws ConnectorException {
 
-                RequiredAuthType requiredAuthType = parseAuthType(service);
+                RequiredAuthType requiredAuthType = RequiredAuthType.parseType(service);
                 HttpServiceConnection connection = new HttpServiceConnection(request,
                         service,
                         requiredAuthType,
@@ -78,16 +74,21 @@ public class HttpConnectorFactory implements IConnectorFactory {
         };
     }
 
-    protected RequiredAuthType parseAuthType(Service service) {
-        return RequiredAuthType.fromValue(service.getEndpointProperties().get(
-                RequiredAuthType.ENDPOINT_PROPERTIES_KEY));
-    }
-
     protected SSLSessionStrategy getSslStrategy(RequiredAuthType authType) {
-        if (authType == RequiredAuthType.MTLS) {
-            return mutualAuthSslStrategy;
-        } else {
-            return standardSslStrategy;
+        try {
+            if (authType == RequiredAuthType.MTLS) {
+                if (mutualAuthSslStrategy == null) {
+                    mutualAuthSslStrategy = SSLSessionStrategyFactory.buildMutual(config);
+                }
+                return mutualAuthSslStrategy;
+            } else {
+                if (standardSslStrategy == null) {
+                    standardSslStrategy = SSLSessionStrategyFactory.buildStandard(config);
+                }
+                return standardSslStrategy;
+            }
+        } catch (Exception e) {
+            throw new RuntimeException(e);
         }
     }
 }
