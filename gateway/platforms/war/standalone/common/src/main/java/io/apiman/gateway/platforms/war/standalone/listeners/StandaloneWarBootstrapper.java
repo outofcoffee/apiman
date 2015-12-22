@@ -12,6 +12,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Properties;
+import java.util.Map;
 
 /**
  * Work-around for JBoss/Wildfly specific code in {@link WarGatewayBootstrapper} that prevents use of
@@ -83,6 +84,8 @@ public class StandaloneWarBootstrapper extends WarGatewayBootstrapper {
         }
 
         // push into system properties
-        configFile.forEach((key, value) -> System.setProperty((String) key, (String) value));
+        for (Map.Entry<Object, Object> entry : configFile.entrySet()) {
+            System.setProperty((String) entry.getKey(), (String) entry.getValue());
+        }
     }
 }
