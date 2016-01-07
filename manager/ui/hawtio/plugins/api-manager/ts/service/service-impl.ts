@@ -12,6 +12,7 @@ module Apiman {
             $scope.typeOptions = ["rest", "soap"];
             $scope.updatedService = new Object();
             $scope.apiSecurity = new Object();
+            $scope.connection = new Object();
 
             var pageData = ServiceEntityLoader.getCommonData($scope, $location);
             if (params.version != null) {
@@ -120,6 +121,15 @@ module Apiman {
                 }
             }, true);
 
+            $scope.$watch('connection', function(newValue) {
+                if (newValue) {
+                    var rval:any = {};
+                    rval.followRedirects = newValue.followRedirects;
+                    $scope.connection = rval;
+                    checkValid();
+                }
+            }, true);
+
             $scope.$watch('selectedGateway', function(newValue) {
                 if (newValue) {
                     var alreadySet = false;
@@ -139,6 +149,7 @@ module Apiman {
                 $scope.updatedService.endpoint = $scope.version.endpoint;
                 $scope.updatedService.endpointType = $scope.version.endpointType;
                 $scope.updatedService.endpointProperties = angular.copy($scope.version.endpointProperties);
+                $scope.connection.followRedirects = epValue($scope.version.endpointProperties, 'connection.followRedirects');
                 delete $scope.updatedService.gateways;
                 if ($scope.version.gateways && $scope.version.gateways.length > 0) {
                     angular.forEach($scope.gateways, function(gateway) {

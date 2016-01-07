@@ -43,6 +43,12 @@
             </div>
             
             <div class="">
+              <span class="clearfix" apiman-i18n-key="api-security-label">Connection:</span>
+              <input ng-model="connection.followRedirects" type="checkbox" id="follow-redirects"></input>
+              <label for="follow-redirects" apiman-i18n-key="connection.followRedirects" style="padding-left: 3px">Follow redirects</label>
+            </div>
+
+            <div class="">
               <span class="clearfix" apiman-i18n-key="api-security-label">API Security:</span>
               <select apiman-select-picker="" ng-model="apiSecurity.type" class="selectpicker">
                 <option value="none" apiman-i18n-key="none">None</option>

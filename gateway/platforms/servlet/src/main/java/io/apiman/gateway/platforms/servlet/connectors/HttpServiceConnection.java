@@ -48,6 +48,7 @@ import com.squareup.okhttp.internal.Util;
 import com.squareup.okhttp.internal.http.AuthenticatorAdapter;
 
 import io.apiman.common.config.options.BasicAuthOptions;
+import io.apiman.common.config.options.ConnectionOptions;
 import io.apiman.gateway.engine.IServiceConnection;
 import io.apiman.gateway.engine.IServiceConnectionResponse;
 import io.apiman.gateway.engine.async.AsyncResultImpl;
@@ -195,6 +196,8 @@ public class HttpServiceConnection implements IServiceConnection, IServiceConnec
                 https.setHostnameVerifier(sslStrategy.getHostnameVerifier());
             }
 
+            ConnectionOptions connectionOptions = new ConnectionOptions(service.getEndpointProperties());
+            connection.setInstanceFollowRedirects(connectionOptions.isFollowRedirects());
             connection.setReadTimeout(15000);
             connection.setConnectTimeout(10000);
             if (request.getType().equalsIgnoreCase("PUT") || request.getType().equalsIgnoreCase("POST")) { //$NON-NLS-1$ //$NON-NLS-2$
