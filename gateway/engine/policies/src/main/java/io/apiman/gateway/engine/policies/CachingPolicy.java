@@ -15,8 +15,6 @@
  */
 package io.apiman.gateway.engine.policies;
 
-import io.apiman.gateway.engine.async.IAsyncResult;
-import io.apiman.gateway.engine.async.IAsyncResultHandler;
 import io.apiman.gateway.engine.beans.ApiRequest;
 import io.apiman.gateway.engine.beans.ApiResponse;
 import io.apiman.gateway.engine.beans.exceptions.ComponentNotFoundException;
@@ -28,13 +26,21 @@ import io.apiman.gateway.engine.io.IReadWriteStream;
 import io.apiman.gateway.engine.io.ISignalReadStream;
 import io.apiman.gateway.engine.io.ISignalWriteStream;
 import io.apiman.gateway.engine.policies.caching.CacheConnectorInterceptor;
+import io.apiman.gateway.engine.policies.caching.MIMEParse;
 import io.apiman.gateway.engine.policies.config.CachingConfig;
 import io.apiman.gateway.engine.policy.IConnectorInterceptor;
 import io.apiman.gateway.engine.policy.IDataPolicy;
 import io.apiman.gateway.engine.policy.IPolicyChain;
 import io.apiman.gateway.engine.policy.IPolicyContext;
+import org.apache.commons.codec.binary.Base64;
+import org.apache.commons.lang3.StringUtils;
 
 import java.io.IOException;
+import java.net.HttpURLConnection;
+import java.util.*;
+
+import static io.apiman.gateway.engine.policies.caching.MIMEParse.parseMediaRange;
+import static java.util.Optional.ofNullable;
 
 /**
  * Policy that enables caching for back-end APIs responses.
@@ -75,30 +81,124 @@ public class CachingPolicy extends AbstractMappedDataPolicy<CachingConfig> imple
         if (config.getTtl() > 0) {
             // Check to see if there is a cache entry for this request.  If so, we need to
             // short-circuit the connector factory by providing a connector interceptor
-            String cacheId = buildCacheID(request);
+            final String cacheId = buildCacheID(request);
             context.setAttribute(CACHE_ID_ATTR, cacheId);
-            ICacheStoreComponent cache = context.getComponent(ICacheStoreComponent.class);
-            cache.getBinary(cacheId, ApiResponse.class,
-                    new IAsyncResultHandler<ISignalReadStream<ApiResponse>>() {
-                        @Override
-                        public void handle(IAsyncResult<ISignalReadStream<ApiResponse>> result) {
-                            if (result.isError()) {
-                                chain.throwError(result.getError());
-                            } else {
-                                ISignalReadStream<ApiResponse> cacheEntry = result.getResult();
-                                if (cacheEntry != null) {
-                                    context.setConnectorInterceptor(new CacheConnectorInterceptor(cacheEntry));
-                                    context.setAttribute(SHOULD_CACHE_ATTR, Boolean.FALSE);
-                                    context.setAttribute(CACHED_RESPONSE, cacheEntry.getHead());
-                                }
-                                chain.doApply(request);
-                            }
-                        }
-                    });
+
+            final ICacheStoreComponent cache = context.getComponent(ICacheStoreComponent.class);
+
+            final String idSuffix = determineHighestContentType(request)
+                    .map(this::generateContentTypeSuffix).orElse("");
+
+            if (StringUtils.isBlank(idSuffix)) {
+                // no explicit content type requested - use default, if present
+                lookupDefault(request, context, chain, cache, cacheId);
+
+            } else {
+                // lookup using requested content type
+                lookupWithSuffix(request, context, chain, cache, cacheId, idSuffix);
+            }
+
         } else {
             context.setAttribute(SHOULD_CACHE_ATTR, Boolean.FALSE);
             chain.doApply(request);
         }
+    }
+
+    /**
+     * Determine the requested content type from the 'Accept' header with the highest 'q' value.
+     *
+     * @param request
+     * @return the most desired content type, or {@link Optional#empty()}
+     */
+    private Optional<String> determineHighestContentType(ApiRequest request) {
+        final String acceptHeader = request.getHeaders().get("Accept");
+        if (StringUtils.isBlank(acceptHeader)) {
+            return Optional.empty();
+
+        } else {
+            final List<MIMEParse.ParseResults> results = new LinkedList<>();
+            for (String r : StringUtils.split(acceptHeader, ',')) {
+                results.add(parseMediaRange(r));
+            }
+
+            if (results.size() == 0) {
+                return Optional.empty();
+
+            } else {
+                // determine the highest ranked
+                Collections.sort(results, (o1, o2) -> o1.params.get("q").compareTo(o2.params.get("q")));
+                final MIMEParse.ParseResults highest = results.get(results.size() - 1);
+
+                return Optional.of(highest.type + "/" + highest.subType);
+            }
+        }
+    }
+
+    /**
+     * Look for a cached value using the cache ID and content type suffix, falling back to
+     * {@link #lookupDefault(ApiRequest, IPolicyContext, IPolicyChain, ICacheStoreComponent, String)}, if not found.
+     *
+     * @param request
+     * @param context
+     * @param chain
+     * @param cache
+     * @param cacheId
+     * @param contentTypeSuffix
+     */
+    private void lookupWithSuffix(final ApiRequest request, final IPolicyContext context, final IPolicyChain<ApiRequest> chain,
+                                  final ICacheStoreComponent cache, final String cacheId, final String contentTypeSuffix) {
+
+        cache.getBinary(cacheId + contentTypeSuffix, ApiResponse.class, result -> {
+            if (result.isError()) {
+                chain.throwError(result.getError());
+            } else {
+                final ISignalReadStream<ApiResponse> cacheEntry = result.getResult();
+                if (null == cacheEntry) {
+                    // fall back to default, if present
+                    lookupDefault(request, context, chain, cache, cacheId);
+
+                } else {
+                    prepareCachedResponse(cacheEntry, context);
+                    chain.doApply(request);
+                }
+            }
+        });
+    }
+
+    /**
+     * Look for a cached value using the default cache ID, which ignores content type.
+     *  @param request
+     * @param context
+     * @param chain
+     * @param cache
+     * @param cacheId
+     */
+    private void lookupDefault(final ApiRequest request, final IPolicyContext context, final IPolicyChain<ApiRequest> chain,
+                               final ICacheStoreComponent cache, final String cacheId) {
+
+        cache.getBinary(cacheId, ApiResponse.class, result -> {
+                    if (result.isError()) {
+                        chain.throwError(result.getError());
+                    } else {
+                        final ISignalReadStream<ApiResponse> cacheEntry = result.getResult();
+                        if (null != cacheEntry) {
+                            prepareCachedResponse(cacheEntry, context);
+                        }
+                        chain.doApply(request);
+                    }
+                });
+    }
+
+    /**
+     * Prepare a response using the provided {@code cacheEntry}.
+     *
+     * @param cacheEntry
+     * @param context
+     */
+    private void prepareCachedResponse(final ISignalReadStream<ApiResponse> cacheEntry, final IPolicyContext context) {
+        context.setConnectorInterceptor(new CacheConnectorInterceptor(cacheEntry));
+        context.setAttribute(SHOULD_CACHE_ATTR, Boolean.FALSE);
+        context.setAttribute(CACHED_RESPONSE, cacheEntry.getHead());
     }
 
     /**
@@ -107,6 +207,23 @@ public class CachingPolicy extends AbstractMappedDataPolicy<CachingConfig> imple
     @Override
     protected void doApply(ApiResponse response, IPolicyContext context, CachingConfig config,
             IPolicyChain<ApiResponse> chain) {
+
+        if (context.getAttribute(SHOULD_CACHE_ATTR, Boolean.TRUE)) {
+            if (response.getCode() == HttpURLConnection.HTTP_OK) {
+                // add content type suffix
+                ofNullable(response.getHeaders().get("Content-Type"))
+                        .filter(StringUtils::isNotBlank)
+                        .ifPresent(contentType -> {
+                            final String cacheId = context.getAttribute(CACHE_ID_ATTR, null);
+                            context.setAttribute(CACHE_ID_ATTR, cacheId + generateContentTypeSuffix(contentType));
+                        });
+
+            } else {
+                // don't cache non-200 responses
+                context.setAttribute(SHOULD_CACHE_ATTR, Boolean.FALSE);
+            }
+        }
+
         chain.doApply(response);
     }
 
@@ -127,11 +244,11 @@ public class CachingPolicy extends AbstractMappedDataPolicy<CachingConfig> imple
     protected IReadWriteStream<ApiResponse> responseDataHandler(final ApiResponse response,
             IPolicyContext context, CachingConfig policyConfiguration) {
         // Possible cache the response for future posterity.
-        Boolean shouldCache = context.getAttribute(SHOULD_CACHE_ATTR, Boolean.TRUE);
-        if (shouldCache) {
+        if (context.getAttribute(SHOULD_CACHE_ATTR, Boolean.TRUE)) {
             try {
-                String cacheId = context.getAttribute(CACHE_ID_ATTR, null);
-                ICacheStoreComponent cache = context.getComponent(ICacheStoreComponent.class);
+                final String cacheId = context.getAttribute(CACHE_ID_ATTR, null);
+
+                final ICacheStoreComponent cache = context.getComponent(ICacheStoreComponent.class);
                 final ISignalWriteStream writeStream = cache.putBinary(cacheId, response, policyConfiguration.getTtl());
                 return new AbstractStream<ApiResponse>() {
                     @Override
@@ -176,7 +293,21 @@ public class CachingPolicy extends AbstractMappedDataPolicy<CachingConfig> imple
         }
         req.append(KEY_SEPARATOR).append(request.getType()).append(KEY_SEPARATOR)
                 .append(request.getDestination());
+
         return req.toString();
     }
 
+    /**
+     * Generates a suffix for the cache ID, based on the given {@code contentType}.
+     *
+     * Note: the type is normalised to lowercase first, as
+     * 'The type, subtype, and parameter names are not case sensitive.', as per
+     * http://www.w3.org/Protocols/rfc1341/4_Content-Type.html
+     *
+     * @param contentType the Content Type
+     * @return the cache ID suffix
+     */
+    private String generateContentTypeSuffix(String contentType) {
+        return KEY_SEPARATOR + Base64.encodeBase64String(contentType.toLowerCase().getBytes());
+    }
 }
