@@ -17,20 +17,12 @@
 package io.apiman.gateway.engine.beans.util;
 
 import java.io.Serializable;
-import java.nio.ByteOrder;
-import java.util.AbstractMap;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.Map.Entry;
-import java.util.Set;
-import java.util.TreeMap;
 import java.util.stream.Collectors;
 
-import net.openhft.hashing.Access;
-import net.openhft.hashing.LongHashFunction;
+import static java.util.Collections.emptyList;
+import static java.util.Optional.ofNullable;
 
 /**
  * A simple multimap able to accept multiple values for a given key.
@@ -46,10 +38,10 @@ import net.openhft.hashing.LongHashFunction;
  * before being hashed (<code>xxHash</code>).
  * </p>
  * <p>
- *     Constraints:
+ * Constraints:
  * <ul>
- *   <li><strong>Not thread-safe.</strong></li>
- *   <li><tt>Null</tt> is <strong>not</strong> a valid key.</li>
+ * <li><strong>Not thread-safe.</strong></li>
+ * <li><tt>Null</tt> is <strong>not</strong> a valid key.</li>
  * </ul>
  * </p>
  *
@@ -57,394 +49,181 @@ import net.openhft.hashing.LongHashFunction;
  */
 public class CaseInsensitiveStringMultiMap implements IStringMultiMap, Serializable {
     private static final long serialVersionUID = -2052530527825235543L;
-    private static final Access<String> LOWER_CASE_ACCESS_INSTANCE = new LowerCaseAccess();
-    //private static final float MAX_LOAD_FACTOR = 0.75f;
-    private Element[] hashArray;
-    private int keyCount = 0;
 
+    private Map<String, List<AbstractMap.SimpleImmutableEntry<String, String>>> store;
+
+    @SuppressWarnings("WeakerAccess")
     public CaseInsensitiveStringMultiMap() {
-        hashArray = new Element[32];
+        store = new LinkedHashMap<>();
     }
 
+    @SuppressWarnings("WeakerAccess")
     public CaseInsensitiveStringMultiMap(int sizeHint) {
-        hashArray = new Element[(int) (sizeHint*1.25)];
+        store = new LinkedHashMap<>(sizeHint);
     }
 
     @Override
     public Iterator<Entry<String, String>> iterator() {
-        return new ElemIterator(hashArray);
+        return getEntries().iterator();
+    }
+
+    @SuppressWarnings("unchecked")
+    private void putMultiValue(String key, String value, boolean replaceAll) {
+        final String normalisedKey = key.toLowerCase();
+
+        List<AbstractMap.SimpleImmutableEntry<String, String>> entries = null;
+
+        if (!replaceAll) {
+            entries = store.get(normalisedKey);
+        }
+        if (null == entries) {
+            entries = new ArrayList<>();
+            store.put(normalisedKey, entries);
+        }
+
+        entries.add(new AbstractMap.SimpleImmutableEntry(key, value));
     }
 
     @Override
     public IStringMultiMap put(String key, String value) {
-        long keyHash = getHash(key);
-        int idx = getIndex(keyHash);
-        if (hashArray[idx] == null) {
-            keyCount++;
-            hashArray[idx] = new Element(key, value, keyHash);
-        } else {
-            remove(key);
-            add(key, value);
-        }
+        putMultiValue(key, value, true);
         return this;
-    }
-
-    private int getIndex(long hash) {
-        return Math.abs((int) (hash % hashArray.length));
-    }
-
-    private long getHash(String text) {
-        return LongHashFunction.xx_r39().hash(text,
-                LOWER_CASE_ACCESS_INSTANCE, 0, text.length());
     }
 
     @Override
     public IStringMultiMap putAll(Map<String, String> map) {
-        map.entrySet().stream()
-                .forEachOrdered(pair -> put(pair.getKey(), pair.getValue()));
+        //noinspection SimplifyStreamApiCallChains
+        map.entrySet().stream().forEachOrdered(pair -> put(pair.getKey(), pair.getValue()));
         return this;
     }
 
     @Override
     public IStringMultiMap add(String key, String value) {
-        long hash = getHash(key);
-        int idx = getIndex(hash);
-        Element existingHead = hashArray[idx];
-        if (existingHead == null) {
-            hashArray[idx] = new Element(key, value, hash);
-            keyCount++;
-        } else { // Last element appears first in list.
-            if (existingHead.getByHash(hash, key) == null) {
-                keyCount++; // If it's a unique key collision and we've not actually seen this key before.
-            }
-            Element newHead = new Element(key, value, hash);
-            newHead.previous = existingHead;
-            hashArray[idx] = newHead;
-        }
+        putMultiValue(key, value, false);
         return this;
-    }
-
-    private Element getElement(String key) {
-        long hash = getHash(key);
-        Element head = hashArray[getIndex(hash)];
-        return head == null ? null : head.getByHash(hash, key);
     }
 
     @Override
     public IStringMultiMap addAll(Map<String, String> map) {
-        map.entrySet().stream()
-                .forEachOrdered(pair -> put(pair.getKey(), pair.getValue()));
+        //noinspection SimplifyStreamApiCallChains
+        map.entrySet().stream().forEachOrdered(pair -> put(pair.getKey(), pair.getValue()));
         return this;
     }
 
     @Override
     public IStringMultiMap addAll(IStringMultiMap map) {
-        map.getEntries().stream()
-                .forEachOrdered(pair -> add(pair.getKey(), pair.getValue()));
+        //noinspection SimplifyStreamApiCallChains
+        map.getEntries().stream().forEachOrdered(pair -> add(pair.getKey(), pair.getValue()));
         return this;
     }
 
     @Override
     public IStringMultiMap remove(String key) {
-        long hash = getHash(key);
-        int idx = getIndex(hash);
-        Element headElem = hashArray[idx];
-        if (headElem != null)
-            hashArray[idx] = headElem.removeByHash(hash, key);
+        // normalise
+        key = key.toLowerCase();
+
+        store.remove(key);
         return this;
     }
 
     @Override
     public String get(String key) {
-        Element elem = getElement(key); // Just return the first value, ignore all others (i.e. most recently added one)
-        return elem == null ? null : elem.getValue();
+        // normalise
+        key = key.toLowerCase();
+
+        final List<AbstractMap.SimpleImmutableEntry<String, String>> entries = store.get(key);
+        return ofNullable(entries).orElse(emptyList()).stream()
+                .map(AbstractMap.SimpleImmutableEntry::getValue)
+                .findFirst().orElse(null);
     }
 
     @Override
     public List<Entry<String, String>> getAllEntries(String key) {
-        if (keyCount > 0) {
-            Element elem = getElement(key);
-            return elem == null ? Collections.emptyList() : elem.getAllEntries(key, getHash(key));
-        }
-        return Collections.emptyList();
+        // normalise
+        key = key.toLowerCase();
+
+        return ofNullable(store.get(key)).orElse(emptyList()).stream()
+                .collect(Collectors.toList());
     }
 
     @Override
     public List<String> getAll(String key) {
-        if (keyCount > 0) {
-            Element elem = getElement(key);
-            return elem == null ? Collections.emptyList() : elem.getAllValues(key, getHash(key));
-         }
-        return Collections.emptyList();
+        // normalise
+        key = key.toLowerCase();
+
+        return ofNullable(store.get(key)).orElse(emptyList()).stream()
+                .map(AbstractMap.SimpleImmutableEntry::getValue)
+                .collect(Collectors.toList());
     }
 
     @Override
     public int size() {
-        return keyCount;
+        return store.size();
     }
 
     @Override
     public List<Entry<String, String>> getEntries() {
-        List<Entry<String, String>> entryList = new ArrayList<>(keyCount);
-        // Look at all top-level elements
-        for (Element oElem : hashArray) {
-            if (oElem != null) { // Add any non-null elements
-                // If there are multiple values, will also add those
-                for (Element iElem = oElem; iElem != null; iElem = iElem.getNext()) {
-                    entryList.add(iElem);
-                }
-            }
-        }
-        return entryList;
+        return store.values().stream()
+                .flatMap(Collection::stream)
+                .collect(Collectors.toList());
     }
 
+    /**
+     * As per the interface contract in {@link IStringMultiMap#toMap()}, only the first
+     * value should be returned for a key.
+     *
+     * @return the map, keyed by the entry's original key, not the normalised key in the store
+     */
     @Override
     public Map<String, String> toMap() {
-        Map<String, String> map = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
-        // Look at all top-level elements
-        for (Element oElem : hashArray) {
-            if (oElem != null) {
-                // Must check all bucket entries as can be hash collision
-                for (Entry<String, String> iElem : oElem.getAllEntries()) {
-                    // Add any non-null ones that aren't already in (NB: LIFO)
-                    if (!map.containsKey(iElem.getKey()))
-                        map.put(iElem.getKey(), iElem.getValue());
-                }
+        final Map<String, String> map = new HashMap<>();
+
+        store.forEach((key, entries) -> {
+            if (entries.size() > 0) {
+                map.put(entries.get(0).getKey(), entries.get(0).getValue());
             }
-        }
+        });
+
         return map;
     }
 
     @Override
     public boolean containsKey(String key) {
-        long hash = getHash(key);
-        int idx = getIndex(hash);
-        // Check if there's an entry the idx, *and* check that the key is not just a collision
-        return hashArray[idx] != null && hashArray[idx].getByHash(hash, key) != null;
+        // normalise
+        key = key.toLowerCase();
+
+        return store.containsKey(key);
     }
 
     @Override
-    public Set<String> keySet() { // TODO
-        return toMap().keySet();
+    public Set<String> keySet() {
+        return store.keySet();
     }
 
     @Override
     public IStringMultiMap clear() {
-        hashArray = new Element[hashArray.length];
-        keyCount = 0;
+        store.clear();
         return this;
     }
 
     @Override
     @SuppressWarnings("nls")
     public String toString() {
-        String elems = keySet().stream()
-                .map(this::getAllEntries)
-                .map(pairs -> pairs.get(0).getKey() + " => [" + joinValues(pairs) + "]")
-                .collect(Collectors.joining(", "));
-        return "{" + elems + "}";
-    }
+        final StringBuilder sb = new StringBuilder();
 
-    @SuppressWarnings("nls")
-    private String joinValues(List<Entry<String, String>> pairs) {
-        return pairs.stream().map(Entry::getValue).collect(Collectors.joining(", "));
-    }
+        store.forEach((key, entries) -> {
+            sb.append(sb.length() > 0 ? ", " : "").append(key).append(" => [");
 
-    private static boolean insensitiveEquals(String a, String b) {
-        if (a.length() != b.length())
-            return false;
+            final List<AbstractMap.SimpleImmutableEntry<String, String>> values =
+                    ofNullable(entries).orElse(emptyList());
 
-        for (int i = 0; i < a.length(); i++) {
-            char charA = a.charAt(i);
-            char charB = b.charAt(i);
-            // If characters match, just continue
-            if (charA == charB)
-                continue;
-            // If charA is upper and we didn't already match above
-            // then charB may be lower (and possibly still not match).
-            if (charA >= 'A' && charA <= 'Z' && (charA + 32 != charB))
-                return false;
-            // If charB is upper and we didn't already match above
-            // then charA may be lower (and possibly still not match).
-            if (charB >= 'A' && charB <= 'Z' && (charB + 32 != charA))
-                return false;
-            // Otherwise matches
-        }
-        return true;
-    }
-
-    private final class Element extends AbstractMap.SimpleImmutableEntry<String, String> implements Iterable<Entry<String, String>> {
-        private static final long serialVersionUID = 4505963331324890429L;
-        private final long keyHash;
-        private Element previous = null;
-
-        /**
-         * The <tt>keyHash</tt> is stored because we may have duplicate entries for a
-         * given hash bucket for two reasons:
-         *
-         * <ol>
-         *   <li> Multiple value insertions for the same key (standard multimap behaviour)
-         *   <li> Hash collision. The key is different, but maps to the same bucket.
-         * </ol>
-         *
-         * We can use the stored hash to rapidly differentiate between these scenarios
-         * and in various operations such as delete.
-         *
-         * @param key the key
-         * @param value the value
-         * @param keyHash the hash <strong>(NB: full hash, not just bucket index!)</strong>
-         */
-        public Element(String key, String value, long keyHash) {
-            super(key, value);
-            this.keyHash = keyHash;
-        }
-
-        public Element removeByHash(long hash, String key) {
-            Element current = this;
-            Element newHead = null;
-            Element link = null;
-            boolean removedAny = false;
-
-            while (current != null) {
-                // If matches hash and key, should discard.
-                if (current.eq(hash, key)) {
-                    Element prev = current.previous;
-                    current.previous = null;
-                    current = prev;
-                    removedAny = true;
-                } else if (newHead == null) {
-                    newHead = link = current;
-                    current = newHead.previous;
-                } else {
-                    link.previous = link = current;
-                    current = current.previous;
-                }
+            for (int i = 0; i < values.size(); i++) {
+                sb.append(i > 0 ? ", " : "").append(values.get(i).getValue());
             }
-            if (removedAny)
-                keyCount--;
-            return newHead;
-        }
 
-        private boolean eq(long hashCode, String key) {
-            return getKeyHash() == hashCode && insensitiveEquals(key, getKey());
-        }
+            sb.append("]");
+        });
 
-        // NB: Even if hashes match, tiny chance of collision - so also check key.
-        public Element getByHash(long hashCode, String key) {
-            return getKeyHash() == hashCode && insensitiveEquals(key, getKey()) ? this : getNext(hashCode, key);
-        }
-
-        @Override
-        public Iterator<Entry<String, String>> iterator() {
-            return getAllEntries().iterator();
-        }
-
-        public List<Entry<String, String>> getAllEntries(String key, long hashCode) {
-            List<Entry<String, String>> allElems = new ArrayList<>();
-            for (Element elem = this; elem != null; elem = elem.getNext()) {
-                if (elem.getKeyHash() == hashCode && insensitiveEquals(key, elem.getKey())) {
-                    allElems.add(elem);
-                }
-            }
-            return allElems;
-        }
-
-        public List<Entry<String, String>> getAllEntries() {
-            List<Entry<String, String>> allElems = new ArrayList<>();
-            for (Element elem = this; elem != null; elem = elem.getNext()) {
-                allElems.add(elem);
-            }
-            return allElems;
-        }
-
-        public long getKeyHash() {
-            return keyHash;
-        }
-
-        public List<String> getAllValues(String key, long hashCode) {
-            List<String> allElems = new ArrayList<>();
-            for (Element elem = this; elem != null; elem = elem.getNext()) {
-                if (elem.getKeyHash() == hashCode && insensitiveEquals(key, elem.getKey())) {
-                    allElems.add(elem.getValue());
-                }
-            }
-            return allElems;
-        }
-
-        public boolean hasNext() {
-            return previous != null;
-        }
-
-        public Element getNext() {
-            return previous;
-        }
-
-        public Element getNext(long hash, String key) {
-          Element elem = this;
-          while (elem.previous != null) {
-              elem = elem.previous;
-              if (elem.getKeyHash() == hash && insensitiveEquals(elem.getKey(), key))
-                  return elem;
-          }
-          return null;
-        }
-    }
-
-    private static final class ElemIterator implements Iterator<Entry<String, String>> {
-        final Element[] hashTable;
-        Element next;
-        Element selected;
-        int idx = 0;
-
-        public ElemIterator(Element[] hashTable) {
-            this.hashTable = hashTable;
-        }
-
-        @Override
-        public boolean hasNext() {
-            if (next == null)
-                setNext();
-            return next != null;
-        }
-
-        @Override
-        public Entry<String, String> next() {
-            selected = next;
-            setNext();
-            return selected;
-        }
-
-        private void setNext() {
-            // If already have a selected element, then select next value with same key
-            if (selected != null && selected.hasNext()) {
-                next = selected.getNext();
-            } else { // Otherwise, look through table until next non-null element found
-                while (idx < hashTable.length) {
-                    if (hashTable[idx] != null) { // Found non-null element
-                        next = hashTable[idx]; // Set it as next
-                        idx++; // Increment index so we'll look at the following element next
-                        return;
-                    }
-                    idx++;
-                }
-                next = null;
-            }
-        }
-    }
-
-    private static final class LowerCaseAccess extends Access<String> {
-        @Override
-        public int getByte(String input, long offset) {
-          char c = input.charAt((int)offset);
-          if (c >= 'A' && c <= 'Z') {
-              return c + 32; // toLower
-          }
-          return c;
-        }
-
-        @Override
-        public ByteOrder byteOrder(String input) {
-            return ByteOrder.nativeOrder();
-        }
+        return "{" + sb.toString() + "}";
     }
 }

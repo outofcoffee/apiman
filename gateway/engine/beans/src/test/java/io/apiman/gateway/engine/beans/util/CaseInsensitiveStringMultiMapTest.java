@@ -110,12 +110,16 @@ public class CaseInsensitiveStringMultiMapTest {
         Assert.assertEquals(expected("a"), actual.keySet());
     }
 
+    /**
+     * The {@link CaseInsensitiveStringMultiMap#toString()} should preserve the order in which values are inserted
+     * as per the contract of {@link IStringMultiMap#add(String, String)} (appends additional values for a key).
+     */
     @Test
-    public void shouldGenerateSensibleToString() throws Exception {
+    public void shouldGenerateSensibleToString() {
         CaseInsensitiveStringMultiMap actual = new CaseInsensitiveStringMultiMap();
         actual.add("a", "b").add("c", "d").add("a", "x");
         String str = actual.toString();
-        Assert.assertEquals("{a => [x, b], c => [d]}", str);
+        Assert.assertEquals("{a => [b, x], c => [d]}", str);
     }
 
     @Test
@@ -196,12 +200,16 @@ public class CaseInsensitiveStringMultiMapTest {
         Assert.assertEquals(expected, c);
     }
 
-    @Test // Last head/value pair should be taken, others ignored.
+    /**
+     * As per interface contract on {@link IStringMultiMap#add(String, String)},
+     * the <strong>first</strong> head/value pair should be taken, and others ignored.
+     */
+    @Test
     public void convertToMap() {
         Map<String, String> expected = new LinkedHashMap<>();
         expected.put("a", "x");
         expected.put("b", "y");
-        expected.put("C", "X_X"); // Last in should win
+        expected.put("c", "z"); // First in should win
 
         CaseInsensitiveStringMultiMap mmap = new CaseInsensitiveStringMultiMap();
         // Additional entries should be ignored
@@ -213,7 +221,7 @@ public class CaseInsensitiveStringMultiMapTest {
 
     @Test
     public void removeEntries() {
-        Map<String, String> expected = new LinkedHashMap<>(); // Expect empty
+        Map<String, String> expected = new LinkedHashMap<>();
         expected.put("C", "X_X");
 
         CaseInsensitiveStringMultiMap mmap = new CaseInsensitiveStringMultiMap();
@@ -225,9 +233,9 @@ public class CaseInsensitiveStringMultiMapTest {
         Assert.assertEquals(expected, actual);
     }
 
-    @Test // A and C will have same bucket by virtue of size 1 array
+    @Test
     public void removeEntriesWithCollision() {
-        Map<String, String> expected = new LinkedHashMap<>(); // Expect empty
+        Map<String, String> expected = new LinkedHashMap<>();
         expected.put("C", "X_X");
         expected.put("b", "b");
         expected.put("aa", "x");
@@ -261,12 +269,30 @@ public class CaseInsensitiveStringMultiMapTest {
         Assert.assertEquals(mmap.getAllEntries("Server").size(), 1);
     }
 
+    /**
+     * The {@link IStringMultiMap#put(String, String)} method sets (or replaces) values against a key.
+     * The contract for {@link IStringMultiMap#get(String)} method should return the
+     * first element for a key (in this case, the only value).
+     */
     @Test
     public void getShouldReturnTheLastValueOnly() {
         CaseInsensitiveStringMultiMap mmap = new CaseInsensitiveStringMultiMap();
         // Additional entries should be ignored
-        mmap.add("a", "x").add("b", "y").add("c", "z").add("c", "XX").add("C", "X_X");
+        mmap.put("a", "x").put("b", "y").put("c", "z").put("c", "XX").put("C", "X_X");
         Assert.assertEquals("X_X", mmap.get("c"));
+    }
+
+    /**
+     * The {@link IStringMultiMap#add(String, String)} method appends values against a (possibly existing)
+     * key. The contract for {@link IStringMultiMap#get(String)} method should return the
+     * <strong>first</strong> element for a key.
+     */
+    @Test
+    public void getShouldReturnTheFirstValueOnly() {
+        CaseInsensitiveStringMultiMap mmap = new CaseInsensitiveStringMultiMap();
+        // Additional entries should be ignored
+        mmap.add("a", "x").add("b", "y").add("c", "z").add("c", "XX").add("C", "X_X");
+        Assert.assertEquals("z", mmap.get("c"));
     }
 
     @Test
