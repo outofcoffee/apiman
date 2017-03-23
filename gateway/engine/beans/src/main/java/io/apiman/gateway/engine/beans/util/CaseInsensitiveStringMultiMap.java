@@ -174,7 +174,7 @@ public class CaseInsensitiveStringMultiMap implements IStringMultiMap, Serializa
         if (keyCount > 0) {
             Element elem = getElement(key);
             return elem == null ? Collections.emptyList() : elem.getAllValues(key, getHash(key));
-         }
+        }
         return Collections.emptyList();
     }
 
@@ -380,13 +380,13 @@ public class CaseInsensitiveStringMultiMap implements IStringMultiMap, Serializa
         }
 
         public Element getNext(long hash, String key) {
-          Element elem = this;
-          while (elem.previous != null) {
-              elem = elem.previous;
-              if (elem.getKeyHash() == hash && insensitiveEquals(elem.getKey(), key))
-                  return elem;
-          }
-          return null;
+            Element elem = this;
+            while (elem.previous != null) {
+                elem = elem.previous;
+                if (elem.getKeyHash() == hash && insensitiveEquals(elem.getKey(), key))
+                    return elem;
+            }
+            return null;
         }
     }
 
@@ -435,11 +435,11 @@ public class CaseInsensitiveStringMultiMap implements IStringMultiMap, Serializa
     private static final class LowerCaseAccess extends Access<String> {
         @Override
         public int getByte(String input, long offset) {
-          char c = input.charAt((int)offset);
-          if (c >= 'A' && c <= 'Z') {
-              return c + 32; // toLower
-          }
-          return c;
+            char c = input.charAt((int)offset);
+            if (c >= 'A' && c <= 'Z') {
+                return c + 32; // toLower
+            }
+            return c;
         }
 
         @Override
