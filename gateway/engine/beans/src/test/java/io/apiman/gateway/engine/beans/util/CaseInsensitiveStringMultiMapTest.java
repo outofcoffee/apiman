@@ -46,6 +46,27 @@ public class CaseInsensitiveStringMultiMapTest {
     }
 
     @Test
+    public void testClash() {
+        CaseInsensitiveStringMultiMap actual = new CaseInsensitiveStringMultiMap();
+        actual.add("X-Dyson-Version", "1");
+        actual.add("Content-Length", "600");
+        actual.add("Set-Cookie", "foo=bar");
+        actual.add("Set-Cookie", "api=man");
+        actual.add("Access-Control-Allow-Credentials", "true");
+
+        Assert.assertEquals(1, actual.getAll("Access-Control-Allow-Credentials").size());
+        Assert.assertEquals(2, actual.getAll("Set-Cookie").size());
+        Assert.assertEquals("true", actual.getAll("Access-Control-Allow-Credentials").get(0));
+        Assert.assertEquals("foo=bar", actual.getAll("Set-Cookie").get(1));
+        Assert.assertEquals("api=man", actual.getAll("Set-Cookie").get(0));
+
+        Assert.assertEquals(1, actual.getAll("X-Dyson-Version").size());
+        Assert.assertEquals(1, actual.getAll("Content-Length").size());
+        Assert.assertEquals("1", actual.getAll("X-Dyson-Version").get(0));
+        Assert.assertEquals("600", actual.getAll("Content-Length").get(0));
+    }
+
+    @Test
     public void isEmpty() {
         CaseInsensitiveStringMultiMap actual = new CaseInsensitiveStringMultiMap();
         actual.add("x", "y").add("x", "z");

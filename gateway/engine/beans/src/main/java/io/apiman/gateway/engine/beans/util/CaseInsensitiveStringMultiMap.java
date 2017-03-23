@@ -114,6 +114,9 @@ public class CaseInsensitiveStringMultiMap implements IStringMultiMap, Serializa
             hashArray[idx] = new Element(key, value, hash);
             keyCount++;
         } else { // Last element appears first in list.
+            if (existingHead.getByHash(hash, key) == null) {
+                keyCount++; // If it's a unique key collision and we've not actually seen this key before.
+            }
             Element newHead = new Element(key, value, hash);
             newHead.previous = existingHead;
             hashArray[idx] = newHead;
@@ -161,7 +164,7 @@ public class CaseInsensitiveStringMultiMap implements IStringMultiMap, Serializa
     public List<Entry<String, String>> getAllEntries(String key) {
         if (keyCount > 0) {
             Element elem = getElement(key);
-            return elem == null ? Collections.emptyList() : elem.getAllEntries();
+            return elem == null ? Collections.emptyList() : elem.getAllEntries(key, getHash(key));
         }
         return Collections.emptyList();
     }
@@ -170,8 +173,8 @@ public class CaseInsensitiveStringMultiMap implements IStringMultiMap, Serializa
     public List<String> getAll(String key) {
         if (keyCount > 0) {
             Element elem = getElement(key);
-            return elem == null ? Collections.emptyList() : elem.getAllValues();
-         }
+            return elem == null ? Collections.emptyList() : elem.getAllValues(key, getHash(key));
+        }
         return Collections.emptyList();
     }
 
@@ -336,6 +339,16 @@ public class CaseInsensitiveStringMultiMap implements IStringMultiMap, Serializa
             return getAllEntries().iterator();
         }
 
+        public List<Entry<String, String>> getAllEntries(String key, long hashCode) {
+            List<Entry<String, String>> allElems = new ArrayList<>();
+            for (Element elem = this; elem != null; elem = elem.getNext()) {
+                if (elem.getKeyHash() == hashCode && insensitiveEquals(key, elem.getKey())) {
+                    allElems.add(elem);
+                }
+            }
+            return allElems;
+        }
+
         public List<Entry<String, String>> getAllEntries() {
             List<Entry<String, String>> allElems = new ArrayList<>();
             for (Element elem = this; elem != null; elem = elem.getNext()) {
@@ -348,10 +361,12 @@ public class CaseInsensitiveStringMultiMap implements IStringMultiMap, Serializa
             return keyHash;
         }
 
-        public List<String> getAllValues() {
+        public List<String> getAllValues(String key, long hashCode) {
             List<String> allElems = new ArrayList<>();
             for (Element elem = this; elem != null; elem = elem.getNext()) {
-                allElems.add(elem.getValue());
+                if (elem.getKeyHash() == hashCode && insensitiveEquals(key, elem.getKey())) {
+                    allElems.add(elem.getValue());
+                }
             }
             return allElems;
         }
@@ -365,13 +380,13 @@ public class CaseInsensitiveStringMultiMap implements IStringMultiMap, Serializa
         }
 
         public Element getNext(long hash, String key) {
-          Element elem = this;
-          while (elem.previous != null) {
-              elem = elem.previous;
-              if (elem.getKeyHash() == hash && insensitiveEquals(elem.getKey(), key))
-                  return elem;
-          }
-          return null;
+            Element elem = this;
+            while (elem.previous != null) {
+                elem = elem.previous;
+                if (elem.getKeyHash() == hash && insensitiveEquals(elem.getKey(), key))
+                    return elem;
+            }
+            return null;
         }
     }
 
@@ -420,11 +435,11 @@ public class CaseInsensitiveStringMultiMap implements IStringMultiMap, Serializa
     private static final class LowerCaseAccess extends Access<String> {
         @Override
         public int getByte(String input, long offset) {
-          char c = input.charAt((int)offset);
-          if (c >= 'A' && c <= 'Z') {
-              return c + 32; // toLower
-          }
-          return c;
+            char c = input.charAt((int)offset);
+            if (c >= 'A' && c <= 'Z') {
+                return c + 32; // toLower
+            }
+            return c;
         }
 
         @Override

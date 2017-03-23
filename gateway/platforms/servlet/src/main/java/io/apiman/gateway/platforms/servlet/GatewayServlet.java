@@ -41,6 +41,9 @@ import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.util.Enumeration;
+import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.CountDownLatch;
 
 import javax.servlet.ServletException;
@@ -61,6 +64,18 @@ import javax.servlet.http.HttpServletResponse;
 public abstract class GatewayServlet extends HttpServlet {
 
     private static final long serialVersionUID = 958726685958622333L;
+
+    /**
+     * Headers that can only be set once as per HTTP specification.
+     */
+    private static final Set<String> SINGLE_ENTRY_HEADERS = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+
+    static {
+        SINGLE_ENTRY_HEADERS.add("Transfer-Encoding"); //$NON-NLS-1$
+        SINGLE_ENTRY_HEADERS.add("Connection"); //$NON-NLS-1$
+        SINGLE_ENTRY_HEADERS.add("Access-Control-Allow-Origin"); //$NON-NLS-1$
+    }
+
 
     /**
      * Constructor.
@@ -269,6 +284,7 @@ public abstract class GatewayServlet extends HttpServlet {
         }
     }
 
+
     /**
      * Writes the API response to the HTTP servlet response object.
      * @param response
@@ -278,8 +294,12 @@ public abstract class GatewayServlet extends HttpServlet {
         response.setStatus(sresponse.getCode());
         HeaderMap headers = sresponse.getHeaders();
         for (String hkey : headers.keySet()) {
-            for (String hval : headers.getAll(hkey)) {
-                response.addHeader(hkey, hval);
+            if (!SINGLE_ENTRY_HEADERS.contains(hkey)) {
+                for (String hval : headers.getAll(hkey)) {
+                    response.addHeader(hkey, hval);
+                }
+            } else {
+                response.addHeader(hkey, headers.get(hkey));
             }
         }
     }
