@@ -40,7 +40,7 @@ public class ConfigDrivenComponentRegistry implements IComponentRegistry {
 
     private IEngineConfig engineConfig;
     private IPluginRegistry pluginRegistry;
-    private Map<Class<? extends IComponent>, IComponent> components = new HashMap<>();
+    private final Map<Class<? extends IComponent>, IComponent> components = new HashMap<>();
 
     /**
      * Constructor.
@@ -113,7 +113,7 @@ public class ConfigDrivenComponentRegistry implements IComponentRegistry {
                 return component;
             }
         } catch (Exception e) {
-            throw new ComponentNotFoundException(componentType.getName());
+            throw new ComponentNotFoundException(componentType.getName(), e);
         }
     }
 
