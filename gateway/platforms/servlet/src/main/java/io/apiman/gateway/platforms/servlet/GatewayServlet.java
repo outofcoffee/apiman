@@ -74,6 +74,7 @@ public abstract class GatewayServlet extends HttpServlet {
         SINGLE_ENTRY_HEADERS.add("Transfer-Encoding"); //$NON-NLS-1$
         SINGLE_ENTRY_HEADERS.add("Connection"); //$NON-NLS-1$
         SINGLE_ENTRY_HEADERS.add("Access-Control-Allow-Origin"); //$NON-NLS-1$
+        SINGLE_ENTRY_HEADERS.add("Access-Control-Allow-Credentials"); //$NON-NLS-1$
     }
 
 
