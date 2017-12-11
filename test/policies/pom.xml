@@ -4,7 +4,7 @@
   <parent>
     <groupId>io.apiman</groupId>
     <artifactId>apiman-test</artifactId>
-    <version>1.2.9.DysonP8</version>
+    <version>1.2.9.DysonP9</version>
   </parent>
   <artifactId>apiman-test-policies</artifactId>
   <name>apiman-test-policies</name>
