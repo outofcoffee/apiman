@@ -62,7 +62,7 @@
       <directoryMode>0755</directoryMode>
       <fileMode>0755</fileMode>
     </dependencySet>
-    <!-- apiman -->
+    <!-- Embedded ES -->
     <dependencySet>
       <outputDirectory>webapps</outputDirectory>
       <includes>
@@ -113,6 +113,19 @@
           <include>**/bootstrap/**</include>
         </includes>
       </unpackOptions>
+    </dependencySet>
+    <!-- logging -->
+    <dependencySet>
+      <outputDirectory>lib</outputDirectory>
+      <includes>
+        <include>org.slf4j:slf4j-jdk14:jar</include>
+      </includes>
+      <useProjectArtifact>false</useProjectArtifact>
+      <useProjectAttachments>false</useProjectAttachments>
+      <useTransitiveDependencies>false</useTransitiveDependencies>
+      <useTransitiveFiltering>false</useTransitiveFiltering>
+      <directoryMode>0755</directoryMode>
+      <fileMode>0755</fileMode>
     </dependencySet>
   </dependencySets>
   <fileSets>
