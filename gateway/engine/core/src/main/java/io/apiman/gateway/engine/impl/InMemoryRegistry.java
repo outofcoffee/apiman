@@ -239,7 +239,7 @@ public class InMemoryRegistry implements IRegistry {
      * @param api an api
      * @return a api key
      */
-    private String getApiIndex(Api api) {
+    protected String getApiIndex(Api api) {
         return getApiIndex(api.getOrganizationId(), api.getApiId(), api.getVersion());
     }
 
@@ -261,7 +261,7 @@ public class InMemoryRegistry implements IRegistry {
      * @param client an client
      * @return a client key
      */
-    private String getClientIndex(Client client) {
+    protected String getClientIndex(Client client) {
         return "CLIENT::" + client.getOrganizationId() + "|" + client.getClientId() + "|" + client.getVersion(); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
     }
 
