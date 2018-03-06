@@ -23,7 +23,13 @@ pipeline {
     }
     stage('Publish') {
       steps {
-        sh "aws s3 cp ./distro/tomcat8/target/apiman-distro-tomcat8-${params.DISTRO_VERSION}-overlay.zip s3://cyclones-maven-repository/thirdparty/io/apiman/apiman-distro-tomcat8/${params.DISTRO_VERSION}/apiman-distro-tomcat8-${params.DISTRO_VERSION}-overlay.zip"
+        script {
+            if ('dev' == params.DISTRO_VERSION) {
+                println 'Skipping publish of development version'
+            } else {
+                sh "aws s3 cp ./distro/tomcat8/target/apiman-distro-tomcat8-${params.DISTRO_VERSION}-overlay.zip s3://cyclones-maven-repository/thirdparty/io/apiman/apiman-distro-tomcat8/${params.DISTRO_VERSION}/apiman-distro-tomcat8-${params.DISTRO_VERSION}-overlay.zip"
+            }
+        }
       }
     }
   }
