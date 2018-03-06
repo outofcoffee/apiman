@@ -9,8 +9,6 @@ import io.apiman.gateway.engine.filesystem.model.RegistryWrapper;
 import io.apiman.gateway.engine.impl.InMemoryRegistry;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.InputStream;
@@ -18,8 +16,11 @@ import java.io.OutputStream;
 import java.util.Collection;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Function;
-import java.util.stream.Collectors;
+import java.util.logging.LogManager;
+
+import static java.util.function.Function.identity;
+import static java.util.stream.Collectors.toMap;
+import static java.util.stream.Collectors.toSet;
 
 /**
  * Adds local file based registry implementation.
@@ -29,7 +30,9 @@ import java.util.stream.Collectors;
 public class LocalFileRegistry extends InMemoryRegistry {
     static final String CONFIG_REGISTRY_PATH = "registry.path";
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(LocalFileRegistry.class);
+    private static final java.util.logging.Logger LOGGER =
+            LogManager.getLogManager().getLogger(LocalFileRegistry.class.getCanonicalName());
+
     private static final ObjectMapper mapper = new ObjectMapper();
     private static final Object mutex = new Object();
     private final File registryFile;
@@ -66,15 +69,16 @@ public class LocalFileRegistry extends InMemoryRegistry {
                             final RegistryWrapper wrapper = mapper.readValue(in, RegistryWrapper.class);
 
                             registryMap.putAll(wrapper.getApis().stream()
-                                .collect(Collectors.toMap(this::getApiIndex, Function.identity())));
+                                    .collect(toMap(this::getApiIndex, identity())));
                             registryMap.putAll(wrapper.getClients().stream()
-                                .collect(Collectors.toMap(this::getClientIndex, Function.identity())));
+                                    .collect(toMap(this::getClientIndex, identity())));
 
                         } catch (Exception e) {
                             throw new RuntimeException("Error reading registry from file: " + registryFile, e);
                         }
                     } else {
-                        LOGGER.debug("Registry file '{}' does not exist - starting with an empty registry", registryFile);
+                        LOGGER.info(() -> String.format(
+                                "Registry file '%s' does not exist - starting with an empty registry", registryFile));
                     }
                     map = registryMap;
                 }
@@ -101,6 +105,9 @@ public class LocalFileRegistry extends InMemoryRegistry {
         }
     }
 
+    /**
+     * Clear the cached {@link #map}, forcing a reload from disk on next read.
+     */
     void clear() {
         synchronized (mutex) {
             map = null;
@@ -112,7 +119,7 @@ public class LocalFileRegistry extends InMemoryRegistry {
         return entries.values().stream()
                 .filter(e -> clazz.isAssignableFrom(e.getClass()))
                 .map(clazz::cast)
-                .collect(Collectors.toSet());
+                .collect(toSet());
     }
 
     @Override
