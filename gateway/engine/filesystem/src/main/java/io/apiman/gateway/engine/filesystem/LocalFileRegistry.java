@@ -16,7 +16,6 @@ import java.io.OutputStream;
 import java.util.Collection;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.logging.LogManager;
 
 import static java.util.function.Function.identity;
 import static java.util.stream.Collectors.toMap;
@@ -29,9 +28,6 @@ import static java.util.stream.Collectors.toSet;
  */
 public class LocalFileRegistry extends InMemoryRegistry {
     static final String CONFIG_REGISTRY_PATH = "registry.path";
-
-    private static final java.util.logging.Logger LOGGER =
-            LogManager.getLogManager().getLogger(LocalFileRegistry.class.getCanonicalName());
 
     private static final ObjectMapper mapper = new ObjectMapper();
     private static final Object mutex = new Object();
@@ -76,9 +72,6 @@ public class LocalFileRegistry extends InMemoryRegistry {
                         } catch (Exception e) {
                             throw new RuntimeException("Error reading registry from file: " + registryFile, e);
                         }
-                    } else {
-                        LOGGER.info(() -> String.format(
-                                "Registry file '%s' does not exist - starting with an empty registry", registryFile));
                     }
                     map = registryMap;
                 }
