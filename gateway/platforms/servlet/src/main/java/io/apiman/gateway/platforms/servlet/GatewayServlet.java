@@ -88,10 +88,13 @@ public abstract class GatewayServlet extends HttpServlet {
      * @see javax.servlet.http.HttpServlet#service(javax.servlet.http.HttpServletRequest, javax.servlet.http.HttpServletResponse)
      */
     @Override
-    protected void service(HttpServletRequest req, HttpServletResponse resp)
-            throws ServletException, IOException {
-        String method = req.getMethod();
-        doAction(req, resp, method);
+    protected void service(HttpServletRequest req, HttpServletResponse resp) {
+        final String method = req.getMethod();
+        if ("GET".equals(method) && "/system/status".equals(req.getPathInfo())) {
+            resp.setStatus(200);
+        } else {
+            doAction(req, resp, method);
+        }
     }
 
     /**
@@ -330,7 +333,7 @@ public abstract class GatewayServlet extends HttpServlet {
                     resp.getOutputStream().flush();
                 } catch (IOException e) {
                     e.printStackTrace();
-                };
+                }
             }
 
             /**
@@ -373,7 +376,7 @@ public abstract class GatewayServlet extends HttpServlet {
                     resp.getOutputStream().flush();
                 } catch (IOException e) {
                     e.printStackTrace();
-                };
+                }
             }
 
             /**
