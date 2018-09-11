@@ -4,7 +4,7 @@
 
   <groupId>io.apiman</groupId>
   <artifactId>apiman</artifactId>
-  <version>1.2.9.DysonP15</version>
+  <version>1.2.9.DysonP16</version>
   <packaging>pom</packaging>
   <name>apiman</name>
 
